@@ -6,35 +6,48 @@ eventually I want to show trends in heart-rate vs. pace.
 from lxml import etree
 import matplotlib.pyplot as plt
 
-class Garmin:
-    """ a class for dealing with garmin's tcx files. """
+def parse_file(filename='activity_1321393768.tcx'):
+    """ function parse_file(filename).
+        returns time, heart rate and pace from the tcx file."""
 
-    def __init__(self, filename='activity_1321393768.tcx'):
-        self.filename = filename
+    # tree = etree.parse(filename)
+    tree = getattr(etree, 'parse')(filename)
+    xmlstr = '{http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2}'
+    points = tree.findall('//'+xmlstr+'Trackpoint')
+    # dist = [r.find(xmlstr+'DistanceMeters').text for r in points]
+    heart = [int(r.find(xmlstr+'HeartRateBpm')[0].text) for r in points]
+    speed = [float(r.find(xmlstr+'Extensions')[0][0].text) for r in points]
+    pace = [float(curr)*3600/1000 for curr in speed]
+    time = range(0, len(speed))
+    return (time, heart, pace)
 
-    def parse_file(self):
-        tree = etree.parse(self.filename)
-        xmlstr = '{http://www.garmin.com/xmlschemas/TrainingCenterDatabase/v2}'
-        points = tree.findall('//'+xmlstr+'Trackpoint')
-        self.distance = [r.find(xmlstr+'DistanceMeters').text for r in points]
-        self.heart_rate = [r.find(xmlstr+'HeartRateBpm')[0].text for r in points]
-        self.speed = [r.find(xmlstr+'Extensions')[0][0].text for r in points]
-        self.pace = [float(curr)*3600/1000 for curr in self.speed]
-        self.time = range(0, len(self.distance))
+def smoothing(time, heart, pace):
+    """ function smoothing(t, HR, pace).
+        keeping only the points which have a stable pace for a minute."""
 
-    def plot_data(self):
-        plt.figure(1)
-        plt.plot(self.time, self.heart_rate)
-        plt.figure(2)
-        plt.plot(self.time, self.speed)
-        plt.figure(3)
-        plt.plot(self.heart_rate, self.pace)
-        plt.show()
+    heart_filt = []
+    pace_filt = []
+    for ind in range(60, len(time)):
+        segment = (heart[(ind-60):ind])
+        if (max(segment)-min(segment)) < 15:
+            print "got one!"
+            heart_filt.append(heart[ind-30]) # TODO improvement: use the average
+            pace_filt.append(pace[ind-30])
+    return (heart_filt, pace_filt)
+
+
+def plot_data(heart_filt, pace_filt):
+    """ plotting the filtered data. """
+
+    plt.figure(1)
+    plt.plot(heart_filt, pace_filt)
+    plt.show()
+
+def main():
+    """ putting it all together... """
+    (time, heart_rate, pace) = parse_file()
+    (hr_filt, v_filt) = smoothing(time, heart_rate, pace)
+    plot_data(hr_filt, v_filt)
 
 if __name__ == '__main__':
-    my_data = Garmin()
-    print "Getting file..."
-    print "Parsing file..."
-    my_data.parse_file()
-    print "Plotting data..."
-    my_data.plot_data()
+    main()
